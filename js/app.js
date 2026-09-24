@@ -1,4 +1,4 @@
-// Router: two hash-routed screens. #find = browse colour identities and jump to Scryfall; #wizard[/N] = the five stages.
+// Router: hash-routed screens. #find (the default) = browse colour identities; #shortlist; #wizard[/N] = the five stages.
 import { store } from "./store.js";
 import { renderFind } from "./screens/find.js";
 import { renderShortlist } from "./screens/shortlist.js";
@@ -24,11 +24,13 @@ const root = document.getElementById("root");
 /** Parse the hash: {screen: "find"|"wizard", stage}. Legacy #stage-N still works. */
 function route() {
   const h = location.hash.replace(/^#\/?/, "");
-  if (h === "find" || h.startsWith("find/")) return { screen: "find" };
   if (h === "shortlist") return { screen: "shortlist" };
-  const m = h.match(/^wizard\/(\d+)/) || h.match(/^stage-(\d+)/);
-  const n = m ? Number(m[1]) : (store.deck.currentStage || 1);
-  return { screen: "wizard", stage: STAGES.some(s => s.n === n) ? n : 1 };
+  if (h === "wizard" || h.startsWith("wizard/") || h.startsWith("stage-")) {
+    const m = h.match(/^wizard\/(\d+)/) || h.match(/^stage-(\d+)/);
+    const n = m ? Number(m[1]) : (store.deck.currentStage || 1);
+    return { screen: "wizard", stage: STAGES.some(s => s.n === n) ? n : 1 };
+  }
+  return { screen: "find" };   // the front door: no hash, #find, or anything unknown
 }
 
 export function goToStage(n) {
