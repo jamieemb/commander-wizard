@@ -42,7 +42,7 @@ const blankDeck = () => ({
     notes: "",
   },
   // Stage 3: plan cards
-  gather: { packagesAdded: false, pasted: "", lastReport: null, notes: "" },
+  gather: { packagesAdded: false, list: [], searched: [], pasted: "", lastReport: null, notes: "" },   // list: plan cards gathered in the app (js/planlist.js); searched: generated searches already clicked through
   // Stages 4 and 5: cutting
   cut: { pasted4: "", report4: null, notes4: "", pasted5: "", report5: null, notes5: "" },
 });

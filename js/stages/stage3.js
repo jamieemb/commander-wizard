@@ -1,12 +1,12 @@
 // Stage 3: Plan cards. The two packages cover the vegetables; this stage is only about finding the cards that do the thing.
-// One sheet, three rows: set up in Archidekt, find plan cards (searches as chips), count what you have.
+// One sheet, three rows: set up in Archidekt, find plan cards (in the app's own search, copied over as a list), count what you have.
 import { store } from "../store.js";
 import { markDirty, saveNote } from "../app.js";
 import { pips, esc, identityFor } from "../sections/colours.js";
 import { aimSentence } from "../sections/aim.js";
-import { webSearchURL } from "../scryfall.js";
 import { PLAN_TARGET, PLAN_GATHER } from "../numbers.js";
 import { analyseDeck } from "../deckcheck.js";
+import { mountPlanSearch } from "../screens/plan.js";
 
 const ICON_COPY = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>`;
 
@@ -16,24 +16,10 @@ export function identityName(colors) {
   return t ? t.name : colors;
 }
 
-/** The generated searches: [{ title, rows: [{ label, q }] }]. Every q is appended to the colour/legality prefix. */
-function searchKit(kws) {
-  const top = kws.slice(0, 5), groups = [], pairs = [];
-  for (let i = 0; i < top.length; i++) for (let j = i + 1; j < top.length; j++) pairs.push({ label: `${top[i]}<span class="dim">+</span>${top[j]}`, q: `o:"${top[i]}" o:"${top[j]}"` });
-  if (pairs.length) groups.push({ title: "Two key words", rows: pairs.slice(0, 8) });
-  if (kws.length) groups.push({ title: "One key word", rows: kws.slice(0, 8).map(k => ({ label: esc(k), q: `o:"${k}"` })) });
-  if (kws.length) groups.push({ title: "Finishers", rows: kws.slice(0, 3).map(k => ({ label: `${esc(k)}<span class="dim">·</span>each opponent`, q: `o:"${k}" o:"each opponent"` })).concat([{ label: "any finisher", q: "otag:win-condition" }]) });
-  if (kws.length) groups.push({ title: "Two-job cards", rows: kws.slice(0, 3).flatMap(k => [{ label: `removal<span class="dim">·</span>${esc(k)}`, q: `otag:removal o:"${k}"` }, { label: `draw<span class="dim">·</span>${esc(k)}`, q: `otag:card-advantage o:"${k}"` }]) });
-  return groups;
-}
-
 export function renderStage3(root, { goToStage }) {
   const d = store.deck, g = d.gather, c = d.commander.chosen;
   const colors = d.colours.colors || "";
   const ident = identityName(colors);
-  const kws = d.commander.keywords || [];
-  const prefix = `${colors && colors !== "C" ? `id<=${colors.toLowerCase()} ` : "id=c "}legal:commander${c ? ` -!"${c.name.split(" // ")[0].replace(/"/g, "")}"` : ""}`;
-  const full = q => `${prefix} ${q}`.trim();
   const aim = aimSentence(d.aim);
 
   root.innerHTML = `
@@ -61,17 +47,8 @@ export function renderStage3(root, { goToStage }) {
         </div>
 
         <div class="sheet-row">
-          <div class="label-row"><span class="sheet-label">2 · Find plan cards</span><span class="helper">Add a card only if it matches two or more key words. Gather about ${PLAN_GATHER}.</span></div>
-          <div class="builder">
-            <input class="kw" id="kw-a" list="kw-list" placeholder="key word" autocomplete="off">
-            <span class="plus">+</span>
-            <input class="kw" id="kw-b" list="kw-list" placeholder="second key word" autocomplete="off">
-            <input class="extra" id="kw-extra" placeholder="extra, e.g. t:creature or mv<=3" autocomplete="off">
-            <a class="btn filled small" id="kw-open" href="#" target="_blank" rel="noopener">Open on Scryfall</a>
-            <button type="button" class="btn text small" id="kw-copy" title="Copy the full Scryfall query">Copy query</button>
-            <datalist id="kw-list">${kws.map(k => `<option value="${esc(k)}">`).join("")}</datalist>
-          </div>
-          <div class="kit" id="kit"></div>
+          <div class="label-row"><span class="sheet-label">2 · Find plan cards</span><span class="helper">Click each search in turn, add what matches two or more key words, move on. Gather about ${PLAN_GATHER}, then copy the list into Archidekt.</span></div>
+          <div id="plan-host"></div>
         </div>
 
         <div class="sheet-row">
@@ -100,24 +77,8 @@ export function renderStage3(root, { goToStage }) {
   f("pkgs-added").addEventListener("change", e => { g.packagesAdded = e.target.checked; persist(); updateProgress(); });
   root.querySelectorAll(".chip.copy").forEach(b => b.addEventListener("click", () => copy(b.dataset.copy, b)));
 
-  // ----- custom search -----
-  function customQuery() {
-    const a = f("kw-a").value.trim(), b = f("kw-b").value.trim(), x = f("kw-extra").value.trim();
-    const q = full([a && `o:"${a}"`, b && `o:"${b}"`, x].filter(Boolean).join(" "));
-    f("kw-open").href = webSearchURL(q); f("kw-open").title = q;
-    return q;
-  }
-  for (const id of ["kw-a", "kw-b", "kw-extra"]) f(id).addEventListener("input", customQuery);
-  f("kw-copy").addEventListener("click", () => copy(customQuery(), f("kw-copy"), "Copied"));
-  if (kws[0]) f("kw-a").value = kws[0];
-  if (kws[1]) f("kw-b").value = kws[1];
-  customQuery();
-
-  // ----- generated searches as chips -----
-  const kit = searchKit(kws);
-  f("kit").innerHTML = kit.length ? kit.map(gr => `
-    <div class="kit-group"><span class="kit-title">${esc(gr.title)}</span><div class="chip-row wrap">${gr.rows.map(r => `<a class="chip" href="${webSearchURL(full(r.q))}" target="_blank" rel="noopener" title="${esc(full(r.q))}">${r.label}</a>`).join("")}</div></div>`).join("")
-    : `<p class="helper">Add key words to your commander in Stage 1 and searches appear here.</p>`;
+  // ----- the search, with the generated key-word searches and the plan list (js/screens/plan.js) -----
+  mountPlanSearch(f("plan-host"));
 
   // ----- counter -----
   let report = g.lastReport || null;

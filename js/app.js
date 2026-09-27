@@ -2,6 +2,7 @@
 import { store } from "./store.js";
 import { renderFind } from "./screens/find.js";
 import { renderShortlist } from "./screens/shortlist.js";
+import { renderPlan } from "./screens/plan.js";
 import { shortlist } from "./shortlist.js";
 import { purgeCache, storageBytes } from "./scryfall.js";
 import { renderStage1 } from "./stages/stage1.js";
@@ -21,10 +22,12 @@ export const STAGES = [
 
 const root = document.getElementById("root");
 
-/** Parse the hash: {screen: "find"|"wizard", stage}. Legacy #stage-N still works. */
+/** Parse the hash: {screen: "find"|"shortlist"|"plan"|"wizard", stage}. Legacy #stage-N still works. */
 function route() {
   const h = location.hash.replace(/^#\/?/, "");
   if (h === "shortlist") return { screen: "shortlist" };
+  if (h.startsWith("plan?")) return { screen: "plan" };   // #plan?q=… is the address of a bookmarked search; the search itself lives in Stage 3
+  if (h === "plan") return { screen: "wizard", stage: 3 };
   if (h === "wizard" || h.startsWith("wizard/") || h.startsWith("stage-")) {
     const m = h.match(/^wizard\/(\d+)/) || h.match(/^stage-(\d+)/);
     const n = m ? Number(m[1]) : (store.deck.currentStage || 1);
@@ -76,10 +79,12 @@ function render() {
   const r = route();
   root.innerHTML = "";
   document.body.dataset.screen = r.screen;
+  if (r.screen === "wizard") document.body.dataset.stage = r.stage; else delete document.body.dataset.stage;
   document.querySelectorAll(".nav-item").forEach(a => { const on = a.dataset.screen === r.screen; a.classList.toggle("active", on); if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
   window.scrollTo(0, 0);
   if (r.screen === "find") { renderFind(root); return; }
   if (r.screen === "shortlist") { renderShortlist(root); return; }
+  if (r.screen === "plan") { renderPlan(root); return; }
   root.appendChild(renderStepper(r.stage));
   const stage = document.createElement("div");
   stage.className = "stage";
