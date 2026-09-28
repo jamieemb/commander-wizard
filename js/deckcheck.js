@@ -63,7 +63,7 @@ export async function analyseEntries(entries, headers = []) {
     const oracle = card ? faces(card).map(f => f.oracle_text || "").join("\n") : "";
     const tapped = isLand && /enters(?: the battlefield)? tapped/i.test(oracle) ? (/unless|if you|as long as|if it|if there|choose/i.test(oracle) ? "maybe" : "yes") : false;
     const face = card ? faces(card)[0] : null;
-    cards.push({ name: e.name, qty: e.qty, cats: e.cats, rawCats: e.rawCats, mv, isLand, isBasic, tapped, typeLine: face ? (face.type_line || card.type_line || "") : "", large: face && face.image_uris ? (face.image_uris.large || face.image_uris.normal || "") : "" });
+    cards.push({ name: e.name, qty: e.qty, cats: e.cats, rawCats: e.rawCats, mv, isLand, isBasic, tapped, eur: card ? priceEUR(card) : null, typeLine: face ? (face.type_line || card.type_line || "") : "", large: face && face.image_uris ? (face.image_uris.large || face.image_uris.normal || "") : "" });
   }
   return { headers, total, counts, single, uncategorised, uncategorisedNames, twoJobs, tags, tagged, curve, sixPlus, pips, nonbasics, basics, lands: nonbasics + basics, price, unknown, scryfallOk, cards };
 }

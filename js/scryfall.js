@@ -215,6 +215,12 @@ export function priceEUR(card) {
   return p ? Number(p) : null;
 }
 
+/** Scryfall has no GBP prices; the Cardmarket EUR figure is converted at this rate. Update it when the pound moves. */
+export const GBP_PER_EUR = 0.86;
+export const priceGBP = card => { const e = priceEUR(card); return e == null ? null : e * GBP_PER_EUR; };
+export const eurToGBP = eur => eur == null ? null : eur * GBP_PER_EUR;
+export const fmtGBP = n => n == null ? "" : `£${n.toFixed(2)}`;
+
 /** Large card image URL (672×936, front face); falls back to normal. */
 export function largeImageOf(card) {
   const face = card.image_uris ? card : (card.card_faces && card.card_faces[0]);
