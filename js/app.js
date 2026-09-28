@@ -97,11 +97,12 @@ export function rerender() { render(); refreshSaveNotes(); }
 
 /** "Saved in this browser · HH:MM" from the deck's last save, or "Nothing saved yet". */
 export function saveNote() {
+  if (store.storageFull) return "Not saved: this browser's storage is full";
   const t = store.deck.savedAt ? new Date(store.deck.savedAt) : null;
   return t ? `Saved in this browser · ${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}` : "Nothing saved yet";
 }
 // Only refresh spans that are showing the save note; a stage's own status message ("3 categories still over…") must not be clobbered.
-const isSaveNote = t => !t || /^Saved in this browser|^Nothing saved yet/.test(t);
+const isSaveNote = t => !t || /^Saved in this browser|^Nothing saved yet|^Not saved:/.test(t);
 function refreshSaveNotes() { document.querySelectorAll("[data-save-note]").forEach(el => { if (isSaveNote(el.textContent)) el.textContent = saveNote(); }); }
 export function markDirty() {
   clearTimeout(markDirty._t);
@@ -131,6 +132,7 @@ refreshShortlistBadge();
 // --- boot ---
 // Housekeeping: an earlier build cached whole search pages in localStorage; they crowd out the deck and shortlist.
 purgeCache("/cards/search");
+purgeCache("/cards/collection");   // and whole batches of card facts keyed by every name in them; cards are now cached one by one
 if (storageBytes() > 2.5 * 1024 * 1024) purgeCache();
 store.init();
 window.addEventListener("hashchange", render);

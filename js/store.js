@@ -1,4 +1,5 @@
 // Wizard state, persisted per deck in localStorage.
+import { purgeCache } from "./scryfall.js";
 
 const KEY = "cw:decks";
 const CURRENT = "cw:currentDeck";
@@ -59,13 +60,20 @@ export function deckName(d) {
 function loadAll() {
   try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return {}; }
 }
+/** Write every deck. If the browser's storage is full, drop the Scryfall caches (cheap to refetch) and try once more. */
 function saveAll(all) {
-  try { localStorage.setItem(KEY, JSON.stringify(all)); } catch { /* ignore */ }
+  const item = JSON.stringify(all);
+  try { localStorage.setItem(KEY, item); return true; }
+  catch {
+    purgeCache();
+    try { localStorage.setItem(KEY, item); return true; } catch { return false; }
+  }
 }
 
 export const store = {
   deckId: null,
   deck: null,
+  storageFull: false,   // the last save could not be written: the footer says so
   listeners: new Set(),
 
   init() {
@@ -87,7 +95,8 @@ export const store = {
     this.deck.savedAt = new Date().toISOString();
     const all = loadAll();
     all[this.deckId] = this.deck;
-    saveAll(all);
+    this.storageFull = !saveAll(all);
+    if (this.storageFull) console.warn("Commander Wizard: the deck could not be saved, this browser's storage is full");
     this.listeners.forEach(fn => fn(this.deck));
   },
 

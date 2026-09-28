@@ -44,12 +44,15 @@ export function storageBytes() {
 /** Only the fields the app reads: a full Scryfall card is 6-10 KB, this is about a quarter of that. */
 const FACE_KEYS = ["name", "type_line", "oracle_text", "mana_cost", "colors", "power", "toughness", "loyalty", "image_uris"];
 const CARD_KEYS = ["id", "oracle_id", "name", "layout", "type_line", "oracle_text", "mana_cost", "cmc", "colors", "color_identity", "keywords", "power", "toughness", "loyalty", "image_uris", "scryfall_uri", "edhrec_rank", "rarity", "set", "set_name", "collector_number"];
+const IMAGE_KEYS = ["small", "normal", "large", "art_crop"];   // the sizes the app shows; png and border_crop are never used
+const slimImages = u => { if (!u) return u; const o = {}; for (const k of IMAGE_KEYS) if (u[k]) o[k] = u[k]; return o; };
 export function slimCard(c) {
   if (!c || typeof c !== "object") return c;
   const out = {};
   for (const k of CARD_KEYS) if (c[k] !== undefined) out[k] = c[k];
+  if (out.image_uris) out.image_uris = slimImages(out.image_uris);
   if (c.prices) out.prices = { eur: c.prices.eur ?? null, eur_foil: c.prices.eur_foil ?? null, usd: c.prices.usd ?? null };
-  if (c.card_faces) out.card_faces = c.card_faces.map(f => { const o = {}; for (const k of FACE_KEYS) if (f[k] !== undefined) o[k] = f[k]; return o; });
+  if (c.card_faces) out.card_faces = c.card_faces.map(f => { const o = {}; for (const k of FACE_KEYS) if (f[k] !== undefined) o[k] = f[k]; if (o.image_uris) o.image_uris = slimImages(o.image_uris); return o; });
   return out;
 }
 
@@ -88,17 +91,47 @@ async function getJSON(path, transform = x => x) {
   });
 }
 
+// ----- card facts by name: one bounded cache for every lookup by name (the deck, the packages, the identity art) -----
+// The old way cached a whole batch under a key made of every name in it, so a deck of 200 cards cost ~300 KB per
+// distinct name set, and every cut made a new set. This keeps each card once, least recently used out first.
+const CARDS_KEY = "cw:cards";
+const CARDS_MAX = 500;              // slim cards are ~3 KB: about 1.5 MB at most, well inside the 5 MB a browser allows
+let cards = null, cardsSaveTimer = null;
+const notFoundNames = new Set();    // this visit only, so a typo isn't asked about on every redraw
+function cardsMap() {
+  if (cards) return cards;
+  try { cards = JSON.parse(localStorage.getItem(CARDS_KEY) || "{}"); } catch { cards = {}; }
+  if (!cards || typeof cards !== "object" || Array.isArray(cards)) cards = {};
+  return cards;
+}
+function saveCards() {
+  clearTimeout(cardsSaveTimer);
+  cardsSaveTimer = setTimeout(() => {
+    const m = cardsMap(), keys = Object.keys(m);
+    if (keys.length > CARDS_MAX) { keys.sort((a, b) => m[a].t - m[b].t); for (const k of keys.slice(0, keys.length - CARDS_MAX)) delete m[k]; }
+    const item = JSON.stringify(m);
+    try { localStorage.setItem(CARDS_KEY, item); }
+    catch { purgeCache(); try { localStorage.setItem(CARDS_KEY, item); } catch { /* full or blocked: the cards stay in memory for this visit */ } }
+  }, 250);
+}
+
 /**
- * Fetch many cards by exact name in ONE request (Scryfall allows 75 per call).
+ * Cards by exact name, 75 to a Scryfall request, only the names not already known.
  * Returns { byName: { lowercased name -> card }, notFound: [names] }.
  */
 export async function collection(names) {
-  const key = `/cards/collection?names=${names.map(encodeURIComponent).join("|")}`;
-  const cached = cacheGet(key);
-  if (cached) return withFrontFaces(cached);
-  const out = { byName: {}, notFound: [] };
-  for (let i = 0; i < names.length; i += 75) {
-    const chunk = names.slice(i, i + 75);
+  const m = cardsMap(), out = { byName: {}, notFound: [] }, now = Date.now(), missing = [], seen = new Set();
+  for (const raw of names) {
+    const name = String(raw || "").split(" // ")[0].trim(), key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    const hit = m[key];
+    if (hit && hit.v && now - hit.t < CACHE_TTL_MS) { hit.t = now; out.byName[hit.v.name.toLowerCase()] = hit.v; }
+    else if (notFoundNames.has(key)) out.notFound.push(name);
+    else missing.push(name);
+  }
+  for (let i = 0; i < missing.length; i += 75) {
+    const chunk = missing.slice(i, i + 75);
     const json = await scheduled(async () => {
       const res = await fetchWithRetry(API + "/cards/collection", {
         method: "POST",
@@ -108,10 +141,16 @@ export async function collection(names) {
       if (!res.ok) throw new Error(`Scryfall ${res.status} for /cards/collection`);
       return res.json();
     });
-    for (const c of json.data || []) out.byName[c.name.toLowerCase()] = slimCard(c);
-    for (const nf of json.not_found || []) if (nf.name) out.notFound.push(nf.name);
+    const found = new Set();
+    for (const c of json.data || []) {
+      const slim = slimCard(c), full = c.name.toLowerCase(), front = full.split(" // ")[0];
+      out.byName[full] = slim; m[full] = { t: now, v: slim }; found.add(full); found.add(front);
+      if (front !== full) m[front] = { t: now, v: slim };   // findable by the front face, as it is written in a deck list
+    }
+    for (const nf of json.not_found || []) if (nf.name) { out.notFound.push(nf.name); notFoundNames.add(nf.name.toLowerCase()); }
+    for (const name of chunk) if (!found.has(name.toLowerCase()) && !out.notFound.includes(name)) notFoundNames.add(name.toLowerCase());
   }
-  cacheSet(key, out);
+  if (missing.length) saveCards();
   return withFrontFaces(out);
 }
 
