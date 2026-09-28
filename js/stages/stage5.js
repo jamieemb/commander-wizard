@@ -9,6 +9,7 @@ import { analyseEntries, basicSplit, categoryState, BASIC_NAME } from "../deckch
 import { decklist, keyOf } from "../decklist.js";
 import { rowHTML, bindRows, cutOrder } from "../sections/cutlist.js";
 import { bindPeek } from "../peek.js";
+import { eurToGBP, fmtGBP } from "../scryfall.js";
 
 const ICON_COPY = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>`;
 
@@ -105,7 +106,7 @@ export function renderStage5(root, { goToStage }) {
     const splitColors = colors || ["W", "U", "B", "R", "G"].filter(k => report.pips[k] > 0).join("");
     const split = basicSplit(report.pips, m.basicsWanted, splitColors);
     const scale = Math.max(1, ...Object.values(report.curve), ...Object.values(CURVE_TEMPLATE));
-    f("an-status").textContent = `${report.total} cards in the deck${report.unknown.length ? `, ${report.unknown.length} not found on Scryfall` : ""}`;
+    f("an-status").textContent = `${report.total} cards in the deck · ${fmtGBP(eurToGBP(report.price))} as it stands${report.unknown.length ? ` · ${report.unknown.length} not found on Scryfall` : ""}`;
     f("report").innerHTML = `
       <div class="stat derived"><span class="stat-label">In the deck</span><span class="stat-value">${report.total}</span><span class="stat-sub">excluding the commander</span></div>
       <div class="stat derived ${m.basicsNeeded ? "warn" : "ok"}"><span class="stat-label">Basics to add</span><span class="stat-value">${m.basicsNeeded}</span><span class="stat-sub">${report.lands} lands in, target ${targets.lands}</span></div>
@@ -119,7 +120,8 @@ export function renderStage5(root, { goToStage }) {
     // the plan cards, one list, cutting order
     const plan = decklist.all().filter(e => e.cats.includes("plan")).sort(cutOrder(facts));
     const cutSoFar = plan.filter(e => e.cut).length;
-    f("plan").innerHTML = `<div class="cgroup"><div class="cgroup-head"><span>Plan cards <small>${report.counts.plan}</small></span><span class="state ${m.cutN > 0 ? "over" : "ok"}">${m.cutN > 0 ? `cut ${m.cutN} more` : "at 99"}${cutSoFar ? ` · ${cutSoFar} cut so far` : ""}</span></div>${plan.map(e => rowHTML(e, facts, "plan")).join("") || `<p class="helper">No plan cards. <a href="#wizard/3">Gather them in Stage 3.</a></p>`}</div>`;
+    const planCost = plan.filter(e => !e.cut).reduce((n, e) => n + ((facts[e.key] || {}).eur || 0) * e.qty, 0);
+    f("plan").innerHTML = `<div class="cgroup"><div class="cgroup-head"><span>Plan cards <small>${report.counts.plan} · ${fmtGBP(eurToGBP(planCost))}</small></span><span class="state ${m.cutN > 0 ? "over" : "ok"}">${m.cutN > 0 ? `cut ${m.cutN} more` : "at 99"}${cutSoFar ? ` · ${cutSoFar} cut so far` : ""}</span></div>${plan.map(e => rowHTML(e, facts, "plan")).join("") || `<p class="helper">No plan cards. <a href="#wizard/3">Gather them in Stage 3.</a></p>`}</div>`;
     bindRows(f("plan"), () => load());
     bindPeek(f("plan").querySelectorAll(".crow-name"), el => el.dataset.large || null);
 

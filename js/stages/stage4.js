@@ -8,6 +8,7 @@ import { analyseEntries, categoryState } from "../deckcheck.js";
 import { decklist, keyOf } from "../decklist.js";
 import { rowHTML, bindRows, cutOrder } from "../sections/cutlist.js";
 import { bindPeek } from "../peek.js";
+import { eurToGBP, fmtGBP } from "../scryfall.js";
 
 const SHORT = { ramp: "Ramp", explosive: "Explosive", draw: "Draw", removal: "Removal", mass: "Wipes", protection: "Protection" };
 
@@ -87,7 +88,7 @@ export function renderStage4(root, { goToStage }) {
       f("an-status").textContent = ""; f("report").innerHTML = `<p class="helper">No packages in the deck yet. <a href="#wizard/3">Add them in Stage 3.</a></p>`;
       f("lists").innerHTML = ""; f("extras").textContent = ""; updateProgress(); return;
     }
-    f("an-status").textContent = `${report.total} cards in the deck${report.unknown.length ? `, ${report.unknown.length} not found on Scryfall` : ""}`;
+    f("an-status").textContent = `${report.total} cards in the deck · ${fmtGBP(eurToGBP(report.price))} as it stands${report.unknown.length ? ` · ${report.unknown.length} not found on Scryfall` : ""}`;
     const gcOver = report.tags.GC > gcMax;
     f("report").innerHTML = groups().map(g => `<div class="stat derived ${g.s.state}"><span class="stat-label">${esc(g.short)}</span><span class="stat-value">${g.have}<small>/${g.target}</small></span><span class="stat-sub">${esc(stateText(g, g.key === "lands" ? "land" : "one-job card"))}</span></div>`).join("") +
       `<div class="stat derived ${gcOver ? "over" : "ok"}"><span class="stat-label">Game Changers</span><span class="stat-value">${report.tags.GC}<small>/${gcMax === Infinity ? "any" : gcMax}</small></span><span class="stat-sub">${gcOver ? `cut ${report.tags.GC - gcMax}` : "within the allowance"}</span></div>`;
@@ -96,7 +97,8 @@ export function renderStage4(root, { goToStage }) {
     const all = decklist.all();
     f("lists").innerHTML = groups().map(g => {
       const entries = all.filter(e => e.cats.includes(g.key) && e.src !== "basic" && e.src !== "plan").sort(cutOrder(facts));
-      return `<div class="cgroup"><div class="cgroup-head"><span>${esc(g.label)} <small>${g.have}/${g.target}</small></span><span class="state ${g.s.state}">${esc(stateText(g, g.key === "lands" ? "land" : "one-job card"))}</span></div>${entries.map(e => rowHTML(e, facts, g.key)).join("") || `<p class="helper">Nothing in this category.</p>`}</div>`;
+      const cost = entries.filter(e => !e.cut).reduce((n, e) => n + ((facts[e.key] || {}).eur || 0) * e.qty, 0);
+      return `<div class="cgroup"><div class="cgroup-head"><span>${esc(g.label)} <small>${g.have}/${g.target} · ${fmtGBP(eurToGBP(cost))}</small></span><span class="state ${g.s.state}">${esc(stateText(g, g.key === "lands" ? "land" : "one-job card"))}</span></div>${entries.map(e => rowHTML(e, facts, g.key)).join("") || `<p class="helper">Nothing in this category.</p>`}</div>`;
     }).join("");
     bindRows(f("lists"), () => load());
     bindPeek(f("lists").querySelectorAll(".crow-name"), el => el.dataset.large || null);
