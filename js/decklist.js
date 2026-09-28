@@ -23,17 +23,24 @@ export const decklist = {
   count(src) { return list().filter(e => !e.cut && (!src || e.src === src)).reduce((n, e) => n + e.qty, 0); },
   hasPackages() { return list().some(e => e.src === "base") && list().some(e => e.src === "lands"); },
 
-  /** Entries from a parsed export (js/archidekt.js), tagged with where they came from. Names already in the deck are skipped. */
+  /** Entries from a parsed export (js/archidekt.js), tagged with where they came from.
+   *  A name already in the deck (a plan card that is also in the package, say) keeps its entry and gains the package's jobs and tags: a two-job card. */
   addEntries(parsed, src) {
     let n = 0;
     store.update(() => {
       for (const e of parsed) {
         if (e.cats.includes("ignore") || e.cats.includes("commander")) continue;
         const key = keyOf(e.name);
-        if (!key || list().some(x => x.key === key)) continue;
+        if (!key) continue;
         const cats = e.cats.filter(k => KEYS.has(k));
         const tags = TAG_KEYS.filter(t => e.rawCats.some(r => r.trim().toLowerCase() === t.toLowerCase()));
-        list().push({ key, name: e.name.split(" //")[0].trim(), qty: e.qty || 1, cats: cats.length ? cats : (src === "lands" ? ["lands"] : []), tags, src, cut: false });
+        const have = list().find(x => x.key === key);
+        if (have) {
+          for (const k of cats) if (!have.cats.includes(k)) have.cats.push(k);
+          for (const t of tags) if (!have.tags.includes(t)) have.tags.push(t);
+        } else {
+          list().push({ key, name: e.name.split(" //")[0].trim(), qty: e.qty || 1, cats: cats.length ? cats : (src === "lands" ? ["lands"] : []), tags, src, cut: false });
+        }
         n++;
       }
     });
