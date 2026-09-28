@@ -18,11 +18,16 @@ function pipsOf(card) {
 }
 
 /**
- * Parse + resolve + count. Returns a plain object safe to store.
+ * Parse + resolve + count a pasted export. Returns a plain object safe to store.
  * counts: per category (a card tagged twice counts in both). total: cards excluding commander/sideboard.
  */
 export async function analyseDeck(text) {
   const { entries, headers } = parseDeckText(text);
+  return analyseEntries(entries, headers);
+}
+
+/** The same count from entries already parsed: { qty, name, cats: [category keys], rawCats: [labels and tags] }. The in-app deck list uses this. */
+export async function analyseEntries(entries, headers = []) {
   const live = entries.filter(e => !e.cats.includes("ignore") && !e.cats.includes("commander"));
   let byName = {}, scryfallOk = true;
   if (live.length) { try { ({ byName } = await resolveNames(live.map(e => e.name))); } catch { scryfallOk = false; } }
@@ -55,7 +60,10 @@ export async function analyseDeck(text) {
       const p = pipsOf(card); for (const c in p) pips[c] += p[c] * e.qty;
     }
     if (card) price += (priceEUR(card) || 0) * e.qty;
-    cards.push({ name: e.name, qty: e.qty, cats: e.cats, rawCats: e.rawCats, mv, isLand, isBasic });
+    const oracle = card ? faces(card).map(f => f.oracle_text || "").join("\n") : "";
+    const tapped = isLand && /enters(?: the battlefield)? tapped/i.test(oracle) ? (/unless|if you|as long as|if it|if there|choose/i.test(oracle) ? "maybe" : "yes") : false;
+    const face = card ? faces(card)[0] : null;
+    cards.push({ name: e.name, qty: e.qty, cats: e.cats, rawCats: e.rawCats, mv, isLand, isBasic, tapped, typeLine: face ? (face.type_line || card.type_line || "") : "", large: face && face.image_uris ? (face.image_uris.large || face.image_uris.normal || "") : "" });
   }
   return { headers, total, counts, single, uncategorised, uncategorisedNames, twoJobs, tags, tagged, curve, sixPlus, pips, nonbasics, basics, lands: nonbasics + basics, price, unknown, scryfallOk, cards };
 }

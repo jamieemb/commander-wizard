@@ -35,6 +35,19 @@ const ROLES = [["engine", "Engine"], ["amplifier", "Amplifier"], ["payoff", "Pay
 const TIMINGS = [["setup", "Cast as setup"], ["finisher", "Cast as finisher"]];
 const MAX_CHIPS = 10;
 
+/** Make `card` the deck's commander: compact summary, key words, role and timing defaults, colour identity. Shared with practice mode. */
+export function chooseCommander(d, card) {
+  const cmd = d.commander, c = compact(card);
+  const same = cmd.chosen && cmd.chosen.id === c.id;
+  cmd.chosen = c;
+  if (!same) { cmd.keywords = c.suggestedKeywords.slice(0, MAX_CHIPS); cmd.checks.notMean = false; }
+  if (!cmd.role) cmd.role = "engine";
+  if (!cmd.timing) cmd.timing = "setup";
+  const ident = identityFor(c.colors);
+  d.colours.colors = c.colors; d.colours.colorId = ident ? ident.id : null; d.colours.colorName = ident ? ident.name : c.colors;
+  return c;
+}
+
 /** The search bar (rendered above the stepper). Calls onChange() after a successful lookup. */
 export function renderCommanderSearch(container, { onChange }) {
   const d = store.deck, cmd = d.commander;
@@ -62,14 +75,7 @@ export function renderCommanderSearch(container, { onChange }) {
       if (!/Legendary/.test(card.type_line || "") && !/can be your commander/i.test(oracleOf(card))) {
         status.className = "helper error"; status.textContent = `${card.name} cannot lead a deck.`; return;
       }
-      const c = compact(card);
-      const same = cmd.chosen && cmd.chosen.id === c.id;
-      cmd.chosen = c;
-      if (!same) { cmd.keywords = c.suggestedKeywords.slice(0, MAX_CHIPS); cmd.checks.notMean = false; }
-      if (!cmd.role) cmd.role = "engine";
-      if (!cmd.timing) cmd.timing = "setup";
-      const ident = identityFor(c.colors);
-      d.colours.colors = c.colors; d.colours.colorId = ident ? ident.id : null; d.colours.colorName = ident ? ident.name : c.colors;
+      const c = chooseCommander(d, card);
       f("cmd-name").value = c.name;
       store.save(); markDirty(); idle(); onChange && onChange();
     } catch {

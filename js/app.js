@@ -92,6 +92,9 @@ function render() {
   STAGES.find(s => s.n === r.stage).render(stage, { goToStage });
 }
 
+/** Redraw the current screen, e.g. after switching decks. */
+export function rerender() { render(); refreshSaveNotes(); }
+
 /** "Saved in this browser · HH:MM" from the deck's last save, or "Nothing saved yet". */
 export function saveNote() {
   const t = store.deck.savedAt ? new Date(store.deck.savedAt) : null;

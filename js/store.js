@@ -5,6 +5,8 @@ const CURRENT = "cw:currentDeck";
 
 const blankDeck = () => ({
   name: "",
+  practice: false,        // a practice rep: random commander, built for the repetitions
+  createdAt: null,
   savedAt: null,          // ISO time of the last save, for the "Saved in this browser · HH:MM" note
   currentStage: 1,
   completed: {},
@@ -45,7 +47,14 @@ const blankDeck = () => ({
   gather: { packagesAdded: false, list: [], searched: [], pasted: "", lastReport: null, notes: "" },   // list: plan cards gathered in the app (js/planlist.js); searched: generated searches already clicked through
   // Stages 4 and 5: cutting
   cut: { pasted4: "", report4: null, notes4: "", pasted5: "", report5: null, notes5: "" },
+  // The deck itself (js/decklist.js): packages, plan cards and basics, each with its jobs, tags and cut flag
+  list: [],
 });
+
+/** What a deck is called in the picker: its own name, else its commander, else "New deck". */
+export function deckName(d) {
+  return d.name || (d.commander && d.commander.chosen && d.commander.chosen.name.split(" //")[0]) || "New deck";
+}
 
 function loadAll() {
   try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch { return {}; }
@@ -93,6 +102,45 @@ export const store = {
   },
 
   onChange(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
+
+  /** Every deck saved in this browser, most recently saved first. */
+  decks() {
+    const all = loadAll();
+    return Object.entries(all)
+      .map(([id, d]) => ({ id, name: deckName(d), practice: !!d.practice, savedAt: d.savedAt || "", createdAt: d.createdAt || "", current: id === this.deckId }))
+      .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  },
+  /** A fresh deck, made current. `init(deck)` may fill it in (a chosen commander, say) before the first save. */
+  create({ practice = false } = {}, init) {
+    const all = loadAll();
+    const id = "deck-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    const d = blankDeck();
+    d.practice = practice; d.createdAt = new Date().toISOString();
+    if (init) init(d);
+    d.savedAt = new Date().toISOString();
+    all[id] = d; saveAll(all);
+    try { localStorage.setItem(CURRENT, id); } catch {}
+    this.deckId = id; this.deck = d;
+    this.listeners.forEach(fn => fn(this.deck));
+    return id;
+  },
+  switchTo(id) {
+    const all = loadAll();
+    if (!all[id]) return false;
+    try { localStorage.setItem(CURRENT, id); } catch {}
+    this.deckId = id; this.deck = deepMerge(blankDeck(), all[id]);
+    this.listeners.forEach(fn => fn(this.deck));
+    return true;
+  },
+  /** Delete a deck. Deleting the current one moves to the most recent other deck, or a blank one. */
+  remove(id) {
+    const all = loadAll();
+    delete all[id]; saveAll(all);
+    if (id !== this.deckId) return;
+    const next = Object.entries(all).sort((a, b) => (b[1].savedAt || "").localeCompare(a[1].savedAt || ""))[0];
+    if (next) this.switchTo(next[0]);
+    else { try { localStorage.removeItem(CURRENT); } catch {} this.deckId = null; this.init(); this.listeners.forEach(fn => fn(this.deck)); }
+  },
 
   exportJSON() {
     return JSON.stringify({ exportedAt: new Date().toISOString(), deck: this.deck }, null, 2);

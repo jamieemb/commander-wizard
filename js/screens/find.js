@@ -4,6 +4,7 @@ import { IDENTITIES, TABS } from "../data/colors.js";
 import { webSearchURL, collection, artOf } from "../scryfall.js";
 import { pips, esc, SORTS, JOBS, commanderQuery } from "../sections/colours.js";
 import { openBrowse } from "./browse.js";
+import { startPractice } from "../practice.js";
 
 const STATE_KEY = "cw:find";
 
@@ -37,13 +38,19 @@ export function renderFind(root) {
   root.innerHTML = `
     <div class="find">
       <h1 class="sr-only">Find a commander</h1>
-      <nav class="tabs" id="find-tabs" aria-label="Colour count"></nav>
+      <div class="stepper-row"><nav class="tabs" id="find-tabs" aria-label="Colour count"></nav><button type="button" class="btn text small stepper-reset find-practice" id="find-practice" title="Practice: a random commander in a fresh deck, then the wizard from Stage 1">🎲 Practice</button></div>
       <div class="chip-row scroll" id="find-filters"></div>
       <p class="helper" id="find-note"></p>
       <div class="ident-grid" id="find-cards"></div>
     </div>`;
 
   const tabsEl = root.querySelector("#find-tabs");
+  const practiceBtn = root.querySelector("#find-practice");
+  practiceBtn.addEventListener("click", async () => {
+    practiceBtn.disabled = true; practiceBtn.textContent = "Rolling…";
+    try { await startPractice(); }
+    catch { practiceBtn.textContent = "Scryfall didn't answer"; setTimeout(() => { practiceBtn.textContent = "🎲 Practice"; practiceBtn.disabled = false; }, 1800); }
+  });
   const filtersEl = root.querySelector("#find-filters");
   const cardsEl = root.querySelector("#find-cards");
   const noteEl = root.querySelector("#find-note");
